@@ -518,53 +518,38 @@ class SimpleWebSocketServer(object):
 
 
 	def serveforever(self):
-		while True:
-			rList, wList, xList = select(self.listeners, [], self.listeners, 1)	
+	    while True:
+		self.serveonce()
 
-			for ready in rList:
-				if ready == self.serversocket:
-					try:
-						sock, address = self.serversocket.accept()
-						newsock = self.decorateSocket(sock)
-						newsock.setblocking(0)
-						fileno = newsock.fileno()
-						self.listeners.append(fileno)
-						self.connections[fileno] = self.constructWebSocket(newsock, address)
+	def serveonce(self,timeout=1):
+		rList, wList, xList = select(self.listeners, [], self.listeners, timeout)
 
-					except Exception as n:
+		for ready in rList:
+			if ready == self.serversocket:
+				try:
+					sock, address = self.serversocket.accept()
+					newsock = self.decorateSocket(sock)
+					newsock.setblocking(0)
+					fileno = newsock.fileno()
+					self.listeners.append(fileno)
+					self.connections[fileno] = self.constructWebSocket(newsock, address)
 
-						logging.debug(str(address) + ' ' + str(n))
+				except Exception as n:
 
-						if sock is not None:
-							sock.close()
-				else:
-					client = self.connections[ready]
-					fileno = client.client.fileno()
-				
-					try:
-						client.handleData()
+					logging.debug(str(address) + ' ' + str(n))
 
-					except Exception as n:
+					if sock is not None:
+						sock.close()
+			else:
+				client = self.connections[ready]
+				fileno = client.client.fileno()
+			
+				try:
+					client.handleData()
 
-						logging.debug(str(client.address) + ' ' + str(n))
+				except Exception as n:
 
-						try:
-							client.handleClose()
-						except:
-							pass
-
-						client.close()
-
-						del self.connections[fileno]
-						self.listeners.remove(ready)
-		
-			for failed in xList:
-				if failed == self.serversocket:
-					self.close()
-					raise Exception("server socket failed")
-				else:
-					client = self.connections[failed]
-					fileno = client.client.fileno()
+					logging.debug(str(client.address) + ' ' + str(n))
 
 					try:
 						client.handleClose()
@@ -574,7 +559,25 @@ class SimpleWebSocketServer(object):
 					client.close()
 
 					del self.connections[fileno]
-					self.listeners.remove(failed)
+					self.listeners.remove(ready)
+	
+		for failed in xList:
+			if failed == self.serversocket:
+				self.close()
+				raise Exception("server socket failed")
+			else:
+				client = self.connections[failed]
+				fileno = client.client.fileno()
+
+				try:
+					client.handleClose()
+				except:
+					pass
+
+				client.close()
+
+				del self.connections[fileno]
+				self.listeners.remove(failed)
 					
 
 class SimpleSSLWebSocketServer(SimpleWebSocketServer):
